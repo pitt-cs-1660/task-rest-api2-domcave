@@ -121,4 +121,18 @@ async def delete_task(task_id: int):
     Returns:
         dict: A message indicating that the task was deleted successfully
     """
-    raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Not implemented")
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    task_exists = cursor.execute('''
+        SELECT * FROM tasks WHERE id = ?
+    ''', (task_id,)).fetchall()
+    if not task_exists:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No task associated with taskId {task_id}")
+    
+    cursor.execute('''
+        DELETE FROM tasks WHERE id = ?
+    ''', (task_id,))
+    conn.commit()
+    conn.close()
+    
+    return {"message": f"task {task_id} successfully deleted"}
