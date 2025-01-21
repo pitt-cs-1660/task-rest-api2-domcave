@@ -36,7 +36,23 @@ async def create_task(task_data: TaskCreate):
     Returns:
         TaskRead: The created task data
     """
-    raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Not implemented")
+
+    if not task_data or not hasattr(task_data, "title") or not hasattr(task_data, "completed"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Must pass valid task containing 'title' and 'completed' fields")
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(''' 
+        INSERT INTO tasks (title, description, completed) VALUES (?, ?, ?)
+    ''', (task_data.title, task_data.description, task_data.completed))
+    conn.commit()
+    task_id = cursor.lastrowid
+    conn.close()
+    
+    return TaskRead(id=task_id, title=task_data.title, description=task_data.description, completed=task_data.completed)
+    
+    
+
 
 
 # GET ROUTE to get all tasks
@@ -51,8 +67,15 @@ async def get_tasks():
     Returns:
         list[TaskRead]: A list of all tasks in the database
     """
-    raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Not implemented")
-
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    result = cursor.execute(''' SELECT * FROM tasks ''').fetchall()
+    conn.close()
+    
+    if not result:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No tasks created yet")
+    else:
+        return [TaskRead(id=row["id"], title=row["title"], description=row["description"], completed=bool(row["completed"])) for row in result] 
 
 # UPDATE ROUTE data is sent in the body of the request and the task_id is in the URL
 @app.put("/tasks/{task_id}/", response_model=TaskRead)
@@ -67,8 +90,24 @@ async def update_task(task_id: int, task_data: TaskCreate):
     Returns:
         TaskRead: The updated task data
     """
-    raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Not implemented")
-
+    if not task_id or not task_data or not hasattr(task_data, "title") or not hasattr(task_data, "completed"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Must pass valid taskId (a positive integer) and task containing 'title' and 'completed' fields")
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    task_exists = cursor.execute('''
+        SELECT * FROM tasks WHERE id = ?
+    ''', (task_id,)).fetchall()
+    if not task_exists:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No task associated with taskId {task_id}")
+    
+    cursor.execute('''
+        UPDATE tasks SET title = ?, description = ?, completed = ? WHERE id = ?
+    ''', (task_data.title, task_data.description, task_data.completed, task_id))
+    conn.commit()
+    conn.close()
+    
+    return TaskRead(id=task_id, title=task_data.title, description=task_data.description, completed=task_data.completed)
 
 # DELETE ROUTE task_id is in the URL
 @app.delete("/tasks/{task_id}/")
